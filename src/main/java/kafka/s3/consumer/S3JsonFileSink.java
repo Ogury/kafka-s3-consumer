@@ -15,72 +15,76 @@ import org.slf4j.LoggerFactory;
 
 class S3JsonFileSink extends S3SinkBase implements Sink {
 
-	private static final org.slf4j.Logger logger = LoggerFactory
-			.getLogger(App.class);
+        private static final org.slf4j.Logger logger = LoggerFactory
+                        .getLogger(App.class);
 
-	private int s3MaxObjectSize;
-	private long startOffset;
-	private long endOffset;
-	private int bytesWritten;
-	ByteBuffer buffer;
-	GZIPOutputStream goutStream;
+        private int s3MaxObjectSize;
+        private long startOffset;
+        private long endOffset;
+        private int bytesWritten;
+        ByteBuffer buffer;
+        GZIPOutputStream goutStream;
 
-	File tmpFile;
-	OutputStream tmpOutputStream;
-	OutputStream writer;
-	String topic;
+        File tmpFile;
+        OutputStream tmpOutputStream;
+        OutputStream writer;
+        String topic;
 
-	private GZIPOutputStream getOutputStream(File tmpFile)
-			throws FileNotFoundException, IOException {
-		logger.debug("Creating gzip output stream for tmpFile: " + tmpFile);
-		return new GZIPOutputStream(new FileOutputStream(tmpFile));
-	}
+        private GZIPOutputStream getOutputStream(File tmpFile)
+                        throws FileNotFoundException, IOException {
+                logger.debug("Creating gzip output stream for tmpFile: " + tmpFile);
+                return new GZIPOutputStream(new FileOutputStream(tmpFile));
+        }
 
-	public S3JsonFileSink(String topic, int partition,
-			PropertyConfiguration conf) throws IOException {
-		super(topic, partition, conf);
+        public S3JsonFileSink(String topic, int partition,
+                        PropertyConfiguration conf) throws IOException {
+                super(topic, partition, conf);
 
-		startOffset = 0;
-		endOffset = 0;
-		bytesWritten = 0;
-		tmpFile = File.createTempFile("s3sink", null);
-		goutStream = getOutputStream(tmpFile);
-		this.topic = topic;
+                startOffset = 0;
+                endOffset = 0;
+                bytesWritten = 0;
+                tmpFile = File.createTempFile("s3sink", null);
+                goutStream = getOutputStream(tmpFile);
+                this.topic = topic;
 
-		if (!topicSizes.containsKey(topic)) {
-			logger.warn("No topic specific size found for topic: " + topic);
-			s3MaxObjectSize = conf.getS3MaxObjectSize();
-		} else {
-			s3MaxObjectSize = topicSizes.get(topic);
-		}
-	}
+                if (!topicSizes.containsKey(topic)) {
+                        logger.warn("No topic specific size found for topic: " + topic);
+                        s3MaxObjectSize = conf.getS3MaxObjectSize();
+                } else {
+                        s3MaxObjectSize = topicSizes.get(topic);
+                }
+        }
 
-	@Override
-	public long append(MessageAndMetadata<Message> msgAndMetadata)
-			throws IOException {
-		int messageSize = msgAndMetadata.message().payload().remaining();
-		// logger.debug("Appending message with size: " + messageSize);
+        @Override
+        public long append(MessageAndMetadata<byte[], byte[]> msgAndMetadata)
+                        throws IOException {
 
-		if (bytesWritten + messageSize > s3MaxObjectSize) {
-			goutStream.close();
-			commitChunk(tmpFile, startOffset, endOffset);
-			tmpFile.delete();
-			tmpFile = File.createTempFile("s3sink", null);
-			goutStream.finish();
-			goutStream = getOutputStream(tmpFile);
-			startOffset = endOffset;
-			bytesWritten = 0;
-		}
+                byte[] bytes = msgAndMetadata.message();
+                int messageSize = bytes.length;
 
-		ByteBuffer buffer = msgAndMetadata.message().payload();
-		byte[] bytes = new byte[buffer.remaining()];
-		buffer.get(bytes);
+                // int messageSize = msgAndMetadata.message().payload().remaining();
+                // logger.debug("Appending message with size: " + messageSize);
 
-		goutStream.write(bytes);
-		goutStream.write('\n');
-		bytesWritten += messageSize;
-		endOffset++;
-		return messageSize;
-	}
+                if (bytesWritten + messageSize > s3MaxObjectSize) {
+                        goutStream.close();
+                        commitChunk(tmpFile, startOffset, endOffset);
+                        tmpFile.delete();
+                        tmpFile = File.createTempFile("s3sink", null);
+                        goutStream.finish();
+                        goutStream = getOutputStream(tmpFile);
+                        startOffset = endOffset;
+                        bytesWritten = 0;
+                }
+
+                // ByteBuffer buffer = msgAndMetadata.message().payload();
+                // byte[] bytes = new byte[buffer.remaining()];
+                // buffer.get(bytes);
+
+                goutStream.write(bytes);
+                goutStream.write('\n');
+                bytesWritten += messageSize;
+                endOffset++;
+                return messageSize;
+        }
 
 }
